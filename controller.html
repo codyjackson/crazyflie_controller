@@ -1,0 +1,124 @@
+<html>
+	<head>
+		<script type="text/javascript">
+			var LAST_REPORTED_ORIENTATION = null;
+			var ZERO_ORIENTATION = null;
+
+			function load(){
+				var connection = new WebSocket(document.URL.replace('http', 'ws')+'ws');
+
+				connection.onopen = function(){
+					window.addEventListener("deviceorientation", OnNewOritentation, true);
+
+					window.addEventListener("touchstart", AdjustThrust, true);
+					window.addEventListener("touchend", KillThrust, true);
+					window.addEventListener("touchmove", AdjustThrust, true);
+
+					window.onbeforeunload = connection.close;
+				};
+
+				connection.onerror = function(error){
+					console.log("fail" +error);
+				};
+
+				connection.onmessage = function(response){
+					console.log(response.data);
+				}
+
+				function GetRelativeOrientation(orientation){
+					if(ZERO_ORIENTATION == null)
+						return null;
+
+					var orientation = {
+						'yaw': orientation.yaw+360 - ZERO_ORIENTATION.yaw,
+						'pitch': orientation.pitch - ZERO_ORIENTATION.pitch,
+						'roll': orientation.roll - ZERO_ORIENTATION.roll
+					}
+
+					return orientation;
+				}
+
+				function OnNewOritentation(event){
+					var orientation = {
+						'yaw': 360.0-event.alpha,
+						'pitch': -event.beta/2.0,
+						'roll': event.gamma/2.0
+					};
+
+					LAST_REPORTED_ORIENTATION = orientation;
+
+					document.getElementById('reported-orientation').innerHTML =JSON.stringify(orientation);
+					relativeOrientation = GetRelativeOrientation(orientation);
+					if(relativeOrientation == null)
+						return;
+					
+					document.getElementById('relative-orientation').innerHTML = JSON.stringify(relativeOrientation);
+
+					relativeOrientation.thrust_percentage = LAST_REPORTED_THRUST;
+					connection.send(JSON.stringify(relativeOrientation));
+				}
+			}
+
+			function RecordZeroOrientation(){
+				ZERO_ORIENTATION = LAST_REPORTED_ORIENTATION;
+				ZERO_ORIENTATION.is_zero = true;
+				connection.send(ZERO_ORIENTATION);
+			}
+
+
+			LAST_REPORTED_THRUST = 0;
+			function KillThrust(event){
+				LAST_REPORTED_THRUST = 0;
+				document.getElementById('thrust').innerHTML = LAST_REPORTED_THRUST + "%";
+
+			}
+
+			function AdjustThrust(event){
+				if(event.targetTouches.length != 1)
+					return;
+
+				if(event.targetTouches[0].target.id !== "thrust-input")
+					return;
+
+				event.preventDefault();
+
+				var touch = event.targetTouches[0];
+				var touchX = touch.clientX;
+				var width = document.width;
+				
+				LAST_REPORTED_THRUST = (1.0-((width - touchX)/width));
+				document.getElementById('thrust').innerHTML = LAST_REPORTED_THRUST;
+			}
+		</script>
+		<style>
+			body{
+				padding: 0;
+				margin: 0;
+			}
+
+			#zero-orientation{
+				background-color: red;
+				height:20%;
+			}
+
+			#thrust-input{
+				background-color: green;
+				height: 80%;
+			}
+		</style>
+	</head>
+	<body onload="load()">
+		<div onclick="RecordZeroOrientation()" id="zero-orientation">
+			Reported:
+			<div id="reported-orientation"></div>
+
+			Relative:
+			<div id="relative-orientation"></div>
+
+			Thrust:
+			<div id="thrust"></div>
+		</div>
+		<div id="thrust-input">
+		</div>
+	</body>
+</html>
