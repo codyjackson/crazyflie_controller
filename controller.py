@@ -16,33 +16,42 @@ PHONE_PARAMETERS = {"roll":0.0, "pitch":0.0, "yaw":0.0, "thrust_percentage":0.0}
 PHONE_ZERO_ORIENTATION = {"roll":0.0, "pitch":0.0, "yaw":0.0, "thrust_percentage":0.0}
 
 
-class MainHandler(tornado.web.RequestHandler):
-	def get(self):
-		controllerHTML = open('controller.html', 'r').read()
-		self.write(controllerHTML)
+class MobileController:
+	def __init__(self):
+		self.web_application = tornado.web.Application([
+			(r"/", self.MainHandler),
+			(r"/ws", self.SocketHandler),
+		])
 
-class SocketHandler(tornado.websocket.WebSocketHandler):
-	def open(self):
-		print "Socket Opened"
+	def run_async(self):
+		threading.Thread(target=self.run).start()
 
-	def on_message(self, message):
-		global PHONE_PARAMETERS
-		phoneParams = json.loads(message)
-		PHONE_PARAMETERS["roll"] = phoneParams["roll"]
-		PHONE_PARAMETERS["pitch"] = phoneParams["pitch"]
-		PHONE_PARAMETERS["yaw"] = phoneParams["yaw"]
-		PHONE_PARAMETERS["thrust_percentage"] = phoneParams["thrust_percentage"]
-		
-		if "is_zero" in phoneParams:
-			PHONE_ZERO_ORIENTATION = copy.deepcopy(PHONE_PARAMETERS)
+	def run(self):
+		self.web_application.listen(8080)
+		tornado.ioloop.IOLoop.instance().start()
 
-	def on_close(self):
-		print "Socket Closed"
+	class MainHandler(tornado.web.RequestHandler):
+		def get(self):
+			controllerHTML = open('controller.html', 'r').read()
+			self.write(controllerHTML)
 
-application = tornado.web.Application([
-	(r"/", MainHandler),
-	(r"/ws", SocketHandler),
-])
+	class SocketHandler(tornado.websocket.WebSocketHandler):
+		def open(self):
+			print "Socket Opened"
+
+		def on_message(self, message):
+			global PHONE_PARAMETERS
+			phoneParams = json.loads(message)
+			PHONE_PARAMETERS["roll"] = phoneParams["roll"]
+			PHONE_PARAMETERS["pitch"] = phoneParams["pitch"]
+			PHONE_PARAMETERS["yaw"] = phoneParams["yaw"]
+			PHONE_PARAMETERS["thrust_percentage"] = phoneParams["thrust_percentage"]
+			
+			if "is_zero" in phoneParams:
+				PHONE_ZERO_ORIENTATION = copy.deepcopy(PHONE_PARAMETERS)
+
+		def on_close(self):
+			print "Socket Closed"
 
 class Copter:
 	def __init__(self):
@@ -51,6 +60,7 @@ class Copter:
 
 		self.crazyflie.connectSetupFinished.add_callback(self.on_connection_established_with_copter)
 		self.crazyflie.open_link("radio://0/10/250K")
+		self.mobileController = MobileController()
 
 		self.yaw = 0
 
@@ -75,16 +85,12 @@ class Copter:
 		else:
 			logger.warning("Could not setup logconfiguration after connection!")
 
-	def start_web_server(self):
-		application.listen(8080)
-		tornado.ioloop.IOLoop.instance().start()
-
 	def on_connection_established_with_copter(self, uri):
 		print "connection established"
 
 		self.register_yaw_update_callback()
 		threading.Thread(target=self.continuously_update_copter_parameters).start()
-		threading.Thread(target=self.start_web_server).start()
+		self.mobileController.run_async()
 
 	def get_offset_orientation(self, zeroOrientation, currentOrientation):
 		offsetOrientation = {
