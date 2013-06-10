@@ -1,14 +1,5 @@
-import logging
-logging.basicConfig()
-
-import sys
-print sys.path
-
-import json
-import tornado.ioloop, tornado.web, tornado.websocket
-import sys
-import time
-from threading import Thread
+import json, time, logging, threading
+import tornado.ioloop, tornado.web, tornado.websocket 
 
 import cflib.crtp
 from cflib.crazyflie import Crazyflie
@@ -18,6 +9,8 @@ from cfclient.utils.logconfigreader import LogVariable, LogConfig
 from gameobjects.vector3 import *
 from gameobjects.matrix44 import *
 from math import radians
+
+logging.basicConfig()
 
 PHONE_PARAMETERS = {"roll":0.0, "pitch":0.0, "yaw":0.0, "thrust_percentage":0.0}
 PHONE_ZERO_ORIENTATION = {"roll":0.0, "pitch":0.0, "yaw":0.0, "thrust_percentage":0.0}
@@ -56,44 +49,44 @@ class Copter:
 		self.crazyflie = Crazyflie()
 		cflib.crtp.init_drivers()
 
-		self.crazyflie.connectSetupFinished.add_callback(self.OnConnectionEstablished)
+		self.crazyflie.connectSetupFinished.add_callback(self.on_connection_established_with_copter)
 		self.crazyflie.open_link("radio://0/10/250K")
 
 		self.yaw = 0
 
-	def OnYawChanged(self, data):
+	def on_yaw_update(self, data):
 		if "stabilizer.yaw" not in data:
 			return
 
 		self.yaw = data["stabilizer.yaw"]
 
-	def OnLoggingError(self):
+	def on_callback_failed(self):
 		logger.warning("Callback of error in LogEntry :(")
 
-	def RegisterLogCallbacks(self):
+	def register_yaw_update_callback(self):
 		logconf = LogConfig("stabilizer", 10)
 		logconf.addVariable(LogVariable("stabilizer.yaw", "float"))
 		self.logPacket = self.crazyflie.log.create_log_packet(logconf)
 		if (self.logPacket is not None):
-			self.logPacket.dataReceived.add_callback(self.OnYawChanged)
-			self.logPacket.error.add_callback(self.OnLoggingError)
+			self.logPacket.dataReceived.add_callback(self.on_yaw_update)
+			self.logPacket.error.add_callback(self.on_callback_failed)
 			self.logPacket.start()
 			print "started"
 		else:
 			logger.warning("Could not setup logconfiguration after connection!")
 
-	def StartWebServer(self):
+	def start_web_server(self):
 		application.listen(8080)
 		tornado.ioloop.IOLoop.instance().start()
 
-	def OnConnectionEstablished(self, uri):
+	def on_connection_established_with_copter(self, uri):
 		print "connection established"
 
-		self.RegisterLogCallbacks()
-		Thread(target=self.Tick).start()
-		Thread(target=self.StartWebServer).start()
+		self.register_yaw_update_callback()
+		threading.Thread(target=self.continuously_update_copter_parameters).start()
+		threading.Thread(target=self.start_web_server).start()
 
-	def GetOffsetOrientation(self, zeroOrientation, currentOrientation):
+	def get_offset_orientation(self, zeroOrientation, currentOrientation):
 		offsetOrientation = {
 			"roll" : currentOrientation["roll"] - zeroOrientation["roll"],
 			"pitch" : currentOrientation["pitch"] - zeroOrientation["pitch"],
@@ -101,10 +94,10 @@ class Copter:
 		}
 		return offsetOrientation
 
-	def Tick(self):
+	def continuously_update_copter_parameters(self):
 		global PHONE_PARAMETERS, PHONE_ZERO_ORIENTATION
 		while True:
-			phoneOffsetOrientation = self.GetOffsetOrientation(PHONE_ZERO_ORIENTATION, PHONE_PARAMETERS)
+			phoneOffsetOrientation = self.get_offset_orientation(PHONE_ZERO_ORIENTATION, PHONE_PARAMETERS)
 			phoneTiltVector = Vector3(phoneOffsetOrientation["roll"], phoneOffsetOrientation["pitch"], 0.0)
 			rotationAmount = -self.yaw
 			rotation = Matrix44.z_rotation(radians(-rotationAmount))
