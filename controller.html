@@ -47,7 +47,7 @@
 
 					LAST_REPORTED_ORIENTATION = orientation;
 
-					document.getElementById('reported-orientation').innerHTML =JSON.stringify(orientation);
+					document.getElementById('reported-orientation').innerHTML = JSON.stringify(orientation);
 					relativeOrientation = GetRelativeOrientation(orientation);
 					if(relativeOrientation == null)
 						return;
@@ -61,8 +61,8 @@
 
 			function RecordZeroOrientation(){
 				ZERO_ORIENTATION = LAST_REPORTED_ORIENTATION;
-				ZERO_ORIENTATION.is_zero = true;
-				connection.send(ZERO_ORIENTATION);
+				ZERO_ORIENTATION.is_frame_of_reference = true;
+				connection.send(JSON.stringify(ZERO_ORIENTATION));
 			}
 
 
