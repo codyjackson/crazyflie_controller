@@ -1,0 +1,14 @@
+body{
+	padding: 0;
+	margin: 0;
+}
+
+#record-frame-of-reference{
+	background-color: red;
+	height:20%;
+}
+
+#thrust-input{
+	background-color: green;
+	height: 80%;
+}

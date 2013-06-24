@@ -2,11 +2,19 @@ import json, threading
 import tornado.ioloop, tornado.web, tornado.websocket
 import copter
 
+from gameobjects.vector3 import *
+from gameobjects.matrix44 import *
+from math import radians
+
 class MobileController:
 	def __init__(self):
+		self.copter = copter.Copter()
+		self.frameOfReference = {"roll":0, "pitch":0, "yaw":0}
+
 		self.web_application = tornado.web.Application([
-			(r"/", self.MainHandler),
-			(r"/ws", self.SocketHandler, dict(data = copter.Copter())),
+			(r"/ws", self.SocketHandler, dict(data = self)),
+			(r"/rest/(.*)", self.RestHandler, dict(data = self)),
+			(r"/(.*)", self.StaticHandler),
 		])
 
 	def run_async(self):
@@ -16,28 +24,41 @@ class MobileController:
 		self.web_application.listen(8080)
 		tornado.ioloop.IOLoop.instance().start()
 
-	class MainHandler(tornado.web.RequestHandler):
-		def get(self):
-			controllerHTML = open('controller.html', 'r').read()
-			self.write(controllerHTML)
+	class RestHandler(tornado.web.RequestHandler):
+		def post(self, action):
+			if(action == "establish_connection_with_copter"):
+				self.controller.copter.connect()
+
+		def initialize(self, data):
+			self.controller = data
+
+
+	class StaticHandler(tornado.web.RequestHandler):
+		def get(self, file):
+			if not file:
+				file = "controller.html"
+
+			try:
+				self.write(open(file, 'r').read())
+			except IOError:
+				self.write("")
 
 	class SocketHandler(tornado.websocket.WebSocketHandler):
 		def open(self):
 			print "Socket Opened"
 
 		def initialize(self, data):
-			self.copter = data
-			self.parameterFrameOfReference = {}
+			self.controller = data
 
 		def on_message(self, message):
-			phoneParameters = json.loads(message)
-			if len(self.parameterFrameOfReference) == 0:
-				self.parameterFrameOfReference = phoneParameters
-				self.copter.connect()
+			mobileParameters = json.loads(message)
+			if "heading" in mobileParameters:
+				heading = mobileParameters["heading"]
+				self.controller.copter.set_target_forward_angle(heading["forward"])
+				self.controller.copter.set_target_left_angle(heading["left"])
 
-			self.copter.set_target_forward_angle(phoneParameters["pitch"] - self.parameterFrameOfReference["pitch"])
-			self.copter.set_target_left_angle(phoneParameters["roll"] - self.parameterFrameOfReference["roll"])
-			self.copter.set_target_thrust_percentage(phoneParameters["thrust_percentage"] - self.parameterFrameOfReference["thrust_percentage"])
+			if "thrust_percentage" in mobileParameters:
+				self.controller.copter.set_target_thrust_percentage(mobileParameters["thrust_percentage"])
 
 		def on_close(self):
 			print "Socket Closed"
