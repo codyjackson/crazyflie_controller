@@ -24,7 +24,9 @@ class Copter:
 
 	def on_connection_established_with_copter(self, uri):
 		self.register_yaw_update_callback()
-		threading.Thread(target=self.continuously_update_parameters).start()
+		thread = threading.Thread(target=self.continuously_update_parameters)
+		thread.daemon = True
+		thread.start()
 
 
 

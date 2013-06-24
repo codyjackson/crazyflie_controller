@@ -18,7 +18,9 @@ class MobileController:
 		])
 
 	def run_async(self):
-		threading.Thread(target=self.run).start()
+		thread = threading.Thread(target=self.run)
+		thread.daemon = True
+		thread.start()
 
 	def run(self):
 		self.web_application.listen(8080)
@@ -65,3 +67,5 @@ class MobileController:
 
 controller = MobileController()
 controller.run_async()
+
+raw_input("Press Enter to exit...")
