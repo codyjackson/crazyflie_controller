@@ -29,6 +29,7 @@ class MobileController:
 	class RestHandler(tornado.web.RequestHandler):
 		def post(self, action):
 			if(action == "establish_connection_with_copter"):
+				self.controller.copter.record_frame_of_reference()
 				self.controller.copter.connect()
 
 		def initialize(self, data):
