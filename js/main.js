@@ -64,8 +64,8 @@ function Phone(){
 
 		var touch = event.targetTouches[0];
 		var touchX = touch.clientX;
-		var width = document.width;
-		
+		var width = window.innerWidth;
+
 		this.thrust_percentage = (1.0-((width - touchX)/width));
 	};
 
